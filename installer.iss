@@ -9,20 +9,22 @@ AppId={{A17BB820-8D4B-4510-B984-390B84262489}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
-DefaultDirName={autopf}\{#AppName}
+DefaultDirName={localappdata}\Programs\{#AppName}
 DefaultGroupName={#AppName}
 OutputDir=dist
 OutputBaseFilename=GitHubLauncher-Setup
 SetupIconFile=assets\githublauncher.ico
 UninstallDisplayIcon={app}\GitHubLauncher.exe
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesInstallIn64BitMode=x64compatible
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
+Uninstallable=yes
+CloseApplications=yes
 
 [Files]
-Source: "dist\GitHubLauncher.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "build\installer\GitHubLauncher.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\GitHubLauncher"; Filename: "{app}\GitHubLauncher.exe"

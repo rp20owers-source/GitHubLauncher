@@ -1,14 +1,14 @@
 # GitHubLauncher
 
-GitHubLauncher is a frameless Windows 11 Spotlight-style bar for downloading a
-GitHub repository's latest Windows release. It can launch an `.exe` or `.msi`,
-or safely extract a portable `.zip` under
+GitHubLauncher is a compact Windows desktop app for downloading a GitHub
+repository's latest Windows release. It has a normal titled window and taskbar
+button. It can launch an `.exe` or `.msi`, or safely extract a portable `.zip` under
 `%LOCALAPPDATA%\Programs\<RepoName>`. The backend uses only Python's standard
 library.
 
 ## Use
 
-Launch `GitHubLauncher.exe`, paste a GitHub repository URL (or enter
+Install with `GitHubLauncher-Setup.exe` or launch `GitHubLauncher.exe`, paste a GitHub repository URL (or enter
 `owner/repo`), then:
 
 - **Enter** downloads and launches/installs the selected release.
@@ -16,6 +16,9 @@ Launch `GitHubLauncher.exe`, paste a GitHub repository URL (or enter
   installing it.
 - **Esc** cancels an active download, or closes the bar when idle.
 - **Up/Down** cycles through the last 10 installed repositories.
+
+The app has a normal Windows title bar and taskbar button. Right-click its
+taskbar button and choose **Pin to taskbar** to keep it there.
 
 The bar also detects a GitHub repository URL in the clipboard when it opens or
 receives focus. Right-click the input to paste.
@@ -49,9 +52,9 @@ or exhausted API quota is reported in the bar.
 Requires Python 3.10 or later.
 
 ```powershell
-python -m pip install -r requirements-dev.txt
-python -m black .
-python -m pytest -v
+py -3 -m pip install -r requirements-dev.txt
+py -3 -m black .
+py -3 -m pytest -v
 ```
 
 To build on Windows, install Inno Setup 6, then run:

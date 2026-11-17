@@ -3,7 +3,7 @@ import sys
 import tkinter as tk
 from ctypes import wintypes
 
-from app.ui import SpotlightGitHubInstaller
+from app.ui import GitHubLauncherWindow
 
 APP_TITLE = "GitHubLauncher"
 MUTEX_NAME = "Local\\GitHubLauncher.SingleInstance"
@@ -41,7 +41,7 @@ def main() -> int:
 
     try:
         root = tk.Tk()
-        SpotlightGitHubInstaller(root)
+        GitHubLauncherWindow(root)
         root.mainloop()
     finally:
         if mutex:

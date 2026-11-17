@@ -58,20 +58,22 @@ def _app_data_dir() -> Path:
     return Path(os.environ.get("LOCALAPPDATA", Path.home())) / "GitHubLauncher"
 
 
-class SpotlightGitHubInstaller:
+class GitHubLauncherWindow:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.w, self.h = 600, 68
         self.root.title("GitHubLauncher")
-        self.root.overrideredirect(True)
-        self.root.attributes("-topmost", True)
+        self.root.resizable(False, False)
         self.root.configure(bg=BG_OUTER)
         sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
         self.root.geometry(f"{self.w}x{self.h}+{(sw - self.w) // 2}+{sh // 3}")
         self.root.update_idletasks()
+        icon_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+        icon_path = icon_root / "assets" / "githublauncher.ico"
+        if sys.platform == "win32" and icon_path.exists():
+            self.root.iconbitmap(str(icon_path))
         enable_win_polish(self.root)
 
-        self.drag_x = self.drag_y = 0
         self.is_busy = False
         self.cancel_event = threading.Event()
         self.last_autofilled_clip = ""
@@ -143,8 +145,6 @@ class SpotlightGitHubInstaller:
         self.entry.bind("<FocusOut>", lambda _event: self._set_accent(BORDER_IDLE))
         self.entry.bind("<Up>", self._history_up)
         self.entry.bind("<Down>", self._history_down)
-        self.canvas.bind("<ButtonPress-1>", self._start_move)
-        self.canvas.bind("<B1-Motion>", self._do_move)
         self.root.bind("<Escape>", self._on_escape)
         self.entry.focus_set()
 
@@ -211,14 +211,6 @@ class SpotlightGitHubInstaller:
             capstyle="round",
             tags="icon",
         )
-
-    def _start_move(self, event):
-        self.drag_x, self.drag_y = event.x, event.y
-
-    def _do_move(self, event):
-        x = self.root.winfo_x() + event.x - self.drag_x
-        y = self.root.winfo_y() + event.y - self.drag_y
-        self.root.geometry(f"+{x}+{y}")
 
     def _on_escape(self, _event=None):
         if self.is_busy:
