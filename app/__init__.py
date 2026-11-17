@@ -1,0 +1,1 @@
+"""GitHubLauncher application package."""

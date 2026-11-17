@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m black --check .
+      - run: python -m pytest -v
+
+  installer:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - run: choco install innosetup --yes --no-progress
+      - shell: pwsh
+        run: .\scripts\build_installer.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GitHubLauncher-Windows-Installer
+          path: dist/GitHubLauncher-Setup.exe
+          if-no-files-found: error
