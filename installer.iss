@@ -21,7 +21,7 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
 Uninstallable=yes
-CloseApplications=yes
+CloseApplications=force
 
 [Files]
 Source: "build\installer\GitHubLauncher.exe"; DestDir: "{app}"; Flags: ignoreversion
