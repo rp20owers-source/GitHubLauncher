@@ -4,11 +4,23 @@ $BuildDist = Join-Path $Root "build\installer"
 $BuildWork = Join-Path $Root "build\pyinstaller"
 Push-Location $Root
 try {
-    py -3 scripts\generate_icon.py
-    py -3 -m PyInstaller --noconfirm --clean --onefile --windowed `
+    $Python = (Get-Command python -ErrorAction Stop).Source
+    $PythonVersion = & $Python -c "import sys; print('.'.join(map(str, sys.version_info[:2])))"
+    if ($LASTEXITCODE -ne 0 -or [version]$PythonVersion -lt [version]"3.10") {
+        throw "Python 3.10 or later is required to build GitHubLauncher."
+    }
+
+    & $Python scripts\generate_icon.py
+    if ($LASTEXITCODE -ne 0) {
+        throw "Icon generation failed with exit code $LASTEXITCODE."
+    }
+    & $Python -m PyInstaller --noconfirm --clean --onefile --windowed `
         --name GitHubLauncher --icon assets\githublauncher.ico `
         --add-data "assets\githublauncher.ico;assets" `
         --distpath $BuildDist --workpath $BuildWork main.py
+    if ($LASTEXITCODE -ne 0) {
+        throw "PyInstaller failed with exit code $LASTEXITCODE."
+    }
 
     $Compiler = "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
     if (-not (Test-Path $Compiler)) {
