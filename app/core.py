@@ -4,6 +4,8 @@ import hashlib
 import json
 import os
 import re
+import shutil
+import subprocess
 import threading
 import urllib.error
 import urllib.parse
@@ -25,6 +27,29 @@ SKIP_KEYWORDS = (
     "sha256sums",
     "checksums.txt",
 )
+GITHUB_DOWNLOAD_HOSTS = {"api.github.com", "github.com", "www.github.com"}
+
+
+class _GitHubRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected:
+            old_url = urllib.parse.urlsplit(req.full_url)
+            new_url_parts = urllib.parse.urlsplit(newurl)
+            if (old_url.scheme, old_url.hostname, old_url.port) != (
+                new_url_parts.scheme,
+                new_url_parts.hostname,
+                new_url_parts.port,
+            ):
+                redirected.remove_header("Authorization")
+        return redirected
+
+
+_URL_OPENER = urllib.request.build_opener(_GitHubRedirectHandler())
+
+
+def safe_urlopen(request, timeout=30):
+    return _URL_OPENER.open(request, timeout=timeout)
 
 
 def parse_github_url(url: str) -> tuple[str | None, str | None, str | None]:
@@ -94,7 +119,7 @@ def select_best_asset(assets: list[dict]) -> tuple[str | None, str | None]:
 
 
 def get_github_token() -> str | None:
-    """Read an optional token from the environment or the local app config."""
+    """Read a token from the environment, app config, or authenticated gh CLI."""
     token = os.environ.get("GITHUB_TOKEN", "").strip()
     if token:
         return token
@@ -104,23 +129,37 @@ def get_github_token() -> str | None:
         if local_app_data
         else Path.home() / ".config" / "GitHubLauncher" / "config.json"
     )
-    if not config_path.exists():
-        return None
-    with config_path.open(encoding="utf-8") as config_file:
-        config = json.load(config_file)
-    configured_token = config.get("github_token")
-    return (
-        configured_token.strip()
-        if isinstance(configured_token, str) and configured_token.strip()
-        else None
-    )
+    if config_path.exists():
+        with config_path.open(encoding="utf-8") as config_file:
+            config = json.load(config_file)
+        configured_token = config.get("github_token")
+        if isinstance(configured_token, str) and configured_token.strip():
+            return configured_token.strip()
+
+    gh = shutil.which("gh")
+    if not gh and os.name == "nt":
+        program_files = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+        installed_gh = program_files / "GitHub CLI" / "gh.exe"
+        if installed_gh.is_file():
+            gh = str(installed_gh)
+    if gh:
+        result = subprocess.run(
+            [gh, "auth", "token"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    return None
 
 
 class GitHubClient:
     def __init__(
         self,
         token: str | None = None,
-        opener: Callable = urllib.request.urlopen,
+        opener: Callable = safe_urlopen,
     ):
         self.token = token
         self.opener = opener
@@ -143,6 +182,17 @@ class GitHubClient:
         if self.rate_limit_remaining is not None and self.rate_limit_remaining < 5:
             return f"GitHub API rate limit is low ({self.rate_limit_remaining} requests remaining)."
         return None
+
+    def download_headers(self, url: str) -> dict[str, str]:
+        parsed = urllib.parse.urlsplit(url)
+        if parsed.scheme != "https" or parsed.hostname not in GITHUB_DOWNLOAD_HOSTS:
+            raise ValueError("Refusing to send GitHub credentials to a non-GitHub URL")
+        headers = {"User-Agent": USER_AGENT}
+        if parsed.hostname == "api.github.com":
+            headers["Accept"] = "application/octet-stream"
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        return headers
 
     def _read_json(self, url: str) -> dict | list:
         request = urllib.request.Request(url, headers=self.headers)
@@ -205,9 +255,19 @@ class GitHubClient:
     def download_choice(self, owner: str, repo: str, tag: str | None = None):
         release = self.find_release(owner, repo, tag)
         if release:
-            url, name = select_best_asset(release.get("assets", []))
+            assets = release.get("assets", [])
+            url, name = select_best_asset(assets)
             if url and name:
-                return url, name, release.get("assets", [])
+                asset = next(
+                    (
+                        item
+                        for item in assets
+                        if item.get("name") == name
+                        and item.get("browser_download_url") == url
+                    ),
+                    {},
+                )
+                return asset.get("url", url), name, assets
             zipball = release.get("zipball_url")
             if zipball:
                 release_tag = release.get("tag_name", "latest")
@@ -225,7 +285,7 @@ def download_file(
     headers: dict[str, str] | None = None,
     progress: Callable[[int, int], None] | None = None,
     cancel_event: threading.Event | None = None,
-    opener: Callable = urllib.request.urlopen,
+    opener: Callable = safe_urlopen,
 ) -> int:
     request = urllib.request.Request(url, headers=headers or {"User-Agent": USER_AGENT})
     destination.parent.mkdir(parents=True, exist_ok=True)

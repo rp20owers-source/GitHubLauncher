@@ -31,9 +31,10 @@ download is verified before it is launched or extracted.
 
 ## GitHub API token
 
-Unauthenticated GitHub API access is rate limited. Set `GITHUB_TOKEN` to a
-personal access token with no additional scopes required for public
-repositories, or save this JSON file:
+GitHubLauncher uses `GITHUB_TOKEN`, the local config below, or the token from
+an authenticated GitHub CLI installation (`gh auth login`). This also enables
+private repository releases when the token has read access to that repository.
+Without a token, GitHub may report private repositories as not found.
 
 `%LOCALAPPDATA%\GitHubLauncher\config.json`
 
@@ -43,9 +44,10 @@ repositories, or save this JSON file:
 }
 ```
 
-The environment variable takes precedence. The token is sent only to
-`api.github.com` over HTTPS; release asset downloads do not receive it. A low
-or exhausted API quota is reported in the bar.
+The environment variable takes precedence over local config, which takes
+precedence over GitHub CLI authentication. The token is sent only to HTTPS
+GitHub hosts; authorization is stripped when a download redirects to a
+different host. A low or exhausted API quota is reported in the bar.
 
 ## Development
 

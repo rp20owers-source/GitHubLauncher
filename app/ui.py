@@ -15,12 +15,12 @@ from pathlib import Path
 from app.core import (
     GitHubClient,
     InstallHistory,
-    USER_AGENT,
     download_file,
     find_executable,
     get_github_token,
     matching_checksum_asset,
     parse_github_url,
+    safe_urlopen,
     safe_extract_zip,
     verify_sha256,
 )
@@ -368,18 +368,21 @@ class GitHubLauncherWindow:
             download_file(
                 download_url,
                 dest_path,
-                headers={"User-Agent": USER_AGENT},
+                headers=client.download_headers(download_url),
                 progress=progress,
                 cancel_event=self.cancel_event,
             )
             checksum_asset = matching_checksum_asset(assets, filename)
             if checksum_asset:
                 self.set_ui_state(f"Verifying {filename}...", COLOR_WARN)
-                request = urllib.request.Request(
-                    checksum_asset["browser_download_url"],
-                    headers={"User-Agent": USER_AGENT},
+                checksum_url = checksum_asset.get(
+                    "url", checksum_asset["browser_download_url"]
                 )
-                with urllib.request.urlopen(request, timeout=30) as response:
+                request = urllib.request.Request(
+                    checksum_url,
+                    headers=client.download_headers(checksum_url),
+                )
+                with safe_urlopen(request, timeout=30) as response:
                     checksum_text = response.read(1024 * 1024).decode("utf-8")
                 try:
                     valid = verify_sha256(dest_path, checksum_text, filename)
@@ -398,7 +401,15 @@ class GitHubLauncherWindow:
             self._finish("Download canceled", COLOR_WARN)
         except Exception as error:
             warning = client.rate_limit_warning if client else None
-            message = f"{warning} ({error})" if warning else f"Download failed: {error}"
+            if getattr(error, "code", None) == 404:
+                message = (
+                    "GitHub returned 404. The repository or release may be private; "
+                    "sign in with GitHub CLI or configure GITHUB_TOKEN."
+                )
+            else:
+                message = f"Download failed: {error}"
+            if warning:
+                message = f"{warning} ({message})"
             self._finish(message, COLOR_ERR)
 
     def _run_or_extract(self, file_path: Path, repo: str):

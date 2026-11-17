@@ -3,17 +3,21 @@ import io
 import json
 import threading
 import urllib.error
+import urllib.request
 import zipfile
+from email.message import Message
 from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
+import app.core as core
 from app.core import (
     GitHubClient,
     InstallHistory,
     download_file,
     find_executable,
+    get_github_token,
     parse_github_url,
     safe_extract_zip,
     select_best_asset,
@@ -153,6 +157,26 @@ def test_release_without_windows_assets_uses_its_zipball():
     )
 
 
+def test_private_release_asset_uses_authenticated_api_download_url():
+    asset = {
+        "name": "app-win-x64-setup.exe",
+        "browser_download_url": "https://github.com/owner/repo/releases/download/v1/setup.exe",
+        "url": "https://api.github.com/repos/owner/repo/releases/assets/42",
+    }
+    release = {"assets": [asset]}
+    client = GitHubClient(
+        token="test-token", opener=Mock(return_value=_Response(release))
+    )
+
+    url, filename, _assets = client.download_choice("owner", "repo", "v1")
+
+    assert url == asset["url"]
+    assert filename == asset["name"]
+    headers = client.download_headers(url)
+    assert headers["Authorization"] == "Bearer test-token"
+    assert headers["Accept"] == "application/octet-stream"
+
+
 def test_api_sends_token_and_reports_rate_limit():
     response = _Response({}, {"X-RateLimit-Remaining": "0"})
     opener = Mock(return_value=response)
@@ -162,6 +186,52 @@ def test_api_sends_token_and_reports_rate_limit():
     assert request.get_header("Authorization") == "Bearer test-token"
     assert client.rate_limit_warning == (
         "GitHub API rate limit reached. Set GITHUB_TOKEN to continue."
+    )
+
+
+def test_github_client_only_sends_download_token_to_github_hosts():
+    client = GitHubClient(token="test-token")
+    assert (
+        client.download_headers(
+            "https://github.com/owner/repo/releases/download/v1/app.exe"
+        )["Authorization"]
+        == "Bearer test-token"
+    )
+    with pytest.raises(ValueError, match="non-GitHub URL"):
+        client.download_headers("https://downloads.example/app.exe")
+
+
+def test_github_redirect_strips_authorization_on_host_change():
+    request = urllib.request.Request(
+        "https://github.com/owner/repo/releases/download/v1/app.exe",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    redirected = core._GitHubRedirectHandler().redirect_request(
+        request,
+        None,
+        302,
+        "Found",
+        Message(),
+        "https://release-assets.githubusercontent.com/app.exe",
+    )
+    assert redirected is not None
+    assert redirected.get_header("Authorization") is None
+
+
+def test_get_github_token_falls_back_to_authenticated_cli(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setattr(core.shutil, "which", lambda _name: "gh")
+    run = Mock(return_value=Mock(returncode=0, stdout="cli-token\n"))
+    monkeypatch.setattr(core.subprocess, "run", run)
+
+    assert get_github_token() == "cli-token"
+    run.assert_called_once_with(
+        ["gh", "auth", "token"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
     )
 
 
